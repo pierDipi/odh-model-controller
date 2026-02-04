@@ -1,17 +1,5 @@
-# The following manifests contain a self-signed issuer CR and a certificate CR.
-# More document can be found at https://docs.cert-manager.io
-# WARNING: Targets CertManager v1.0. Check https://cert-manager.io/docs/installation/upgrading/ for breaking changes.
-apiVersion: cert-manager.io/v1
-kind: Issuer
-metadata:
-  labels:
-    app.kubernetes.io/name: odh-model-controller
-    app.kubernetes.io/managed-by: kustomize
-  name: selfsigned-issuer
-  namespace: system
-spec:
-  selfSigned: {}
----
+# Certificate for the odh-model-controller webhook server.
+# Issued by an external CA ClusterIssuer (configured via params.env).
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -22,14 +10,17 @@ metadata:
     app.kubernetes.io/created-by: odh-model-controller
     app.kubernetes.io/part-of: odh-model-controller
     app.kubernetes.io/managed-by: kustomize
-  name: serving-cert  # this name should match the one appeared in kustomizeconfig.yaml
+  name: odh-model-controller-webhook-server
   namespace: system
 spec:
-  # SERVICE_NAME and SERVICE_NAMESPACE will be replaced by kustomize
+  commonName: odh-model-controller-webhook-service.$(NAMESPACE).svc
   dnsNames:
-  - SERVICE_NAME.SERVICE_NAMESPACE.svc
-  - SERVICE_NAME.SERVICE_NAMESPACE.svc.cluster.local
+    - odh-model-controller-webhook-service.$(NAMESPACE).svc
+    - odh-model-controller-webhook-service.$(NAMESPACE).svc.cluster.local
+  duration: 8760h  # 1 year
+  renewBefore: 720h  # 30 days
   issuerRef:
-    kind: Issuer
-    name: selfsigned-issuer
-  secretName: webhook-server-cert # this secret will not be prefixed, since it's not managed by kustomize
+    name: $(ISSUER_REF_NAME)
+    kind: $(ISSUER_REF_KIND)
+    group: $(ISSUER_REF_GROUP)
+  secretName: odh-model-controller-webhook-cert

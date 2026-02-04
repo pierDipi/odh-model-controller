@@ -61,6 +61,10 @@ import (
 const (
 	enableWebhooksEnv = "ENABLE_WEBHOOKS"
 	managedState      = "managed"
+	// Controller disable flags (opt-out, default false = enabled)
+	inferenceServiceControllerDisabledEnv = "INFERENCESERVICE_CONTROLLER_DISABLED"
+	servingRuntimeControllerDisabledEnv   = "SERVINGRUNTIME_CONTROLLER_DISABLED"
+	configmapControllerDisabledEnv        = "CONFIGMAP_CONTROLLER_DISABLED"
 )
 
 var (
@@ -152,13 +156,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	templateClient, tempClientErr := templatev1client.NewForConfig(cfg)
-	if tempClientErr != nil {
-		setupLog.Error(tempClientErr, "unable to create template clientset")
-		os.Exit(1)
-	}
 	signalHandlerCtx := log.IntoContext(ctrl.SetupSignalHandler(), setupLog)
-	setupNim(mgr, signalHandlerCtx, kubeClient, templateClient)
+	setupNim(mgr, signalHandlerCtx, kubeClient, cfg)
 
 	setupLog.Info("starting manager")
 	if err = mgr.Start(signalHandlerCtx); err != nil {
@@ -168,7 +167,7 @@ func main() {
 }
 
 func setupNim(mgr manager.Manager, signalHandlerCtx context.Context,
-	kubeClient *kubernetes.Clientset, templateClient *templatev1client.Clientset) {
+	kubeClient *kubernetes.Clientset, cfg *rest.Config) {
 	var err error
 
 	nimState := os.Getenv("NIM_STATE")
@@ -176,6 +175,12 @@ func setupNim(mgr manager.Manager, signalHandlerCtx context.Context,
 		nimState = managedState
 	}
 	if nimState != "removed" {
+		// Only create templateClient when NIM is enabled (requires OpenShift Template API)
+		templateClient, tempClientErr := templatev1client.NewForConfig(cfg)
+		if tempClientErr != nil {
+			setupLog.Error(tempClientErr, "unable to create template clientset for NIM controller")
+			os.Exit(1)
+		}
 		if err = (&nim.AccountReconciler{
 			Client:         mgr.GetClient(),
 			Scheme:         mgr.GetScheme(),
@@ -298,26 +303,50 @@ func setupWebhooks(mgr ctrl.Manager, setupLog logr.Logger) error {
 }
 
 func setupReconcilers(mgr ctrl.Manager, setupLog logr.Logger, cfg *rest.Config) error {
-	if err := setupInferenceServiceReconciler(mgr, cfg); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "InferenceService")
-		return err
+	// InferenceService controller (includes Route sub-reconciler)
+	// Default: enabled. Set INFERENCESERVICE_CONTROLLER_DISABLED=true to disable
+	if !getEnvAsBool(inferenceServiceControllerDisabledEnv, false) {
+		if err := setupInferenceServiceReconciler(mgr, cfg); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "InferenceService")
+			return err
+		}
+	} else {
+		setupLog.Info("InferenceService controller disabled via INFERENCESERVICE_CONTROLLER_DISABLED=true")
 	}
+
 	if err := setupSecretReconciler(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Secret")
 		return err
 	}
-	if err := setupConfigMapReconciler(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "ConfigMap")
-		return err
+
+	// ConfigMap controller (watches OpenShift service CA)
+	// Default: enabled. Set CONFIGMAP_CONTROLLER_DISABLED=true to disable
+	if !getEnvAsBool(configmapControllerDisabledEnv, false) {
+		if err := setupConfigMapReconciler(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "ConfigMap")
+			return err
+		}
+	} else {
+		setupLog.Info("ConfigMap controller disabled via CONFIGMAP_CONTROLLER_DISABLED=true")
 	}
+
 	if err := setupPodReconciler(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Pod")
 		return err
 	}
-	if err := setupServingRuntimeReconciler(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "ServingRuntime")
-		return err
+
+	// ServingRuntime controller
+	// Default: enabled. Set SERVINGRUNTIME_CONTROLLER_DISABLED=true to disable
+	if !getEnvAsBool(servingRuntimeControllerDisabledEnv, false) {
+		if err := setupServingRuntimeReconciler(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "ServingRuntime")
+			return err
+		}
+	} else {
+		setupLog.Info("ServingRuntime controller disabled via SERVINGRUNTIME_CONTROLLER_DISABLED=true")
 	}
+
+	// LLMInferenceService controller - always enabled (main focus for XKS)
 	if err := setupLLMInferenceServiceReconciler(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "LLMInferenceService")
 		return err

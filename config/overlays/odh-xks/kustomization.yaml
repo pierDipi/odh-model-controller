@@ -1,0 +1,98 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Namespace where odh-model-controller components are deployed
+namespace: opendatahub
+
+resources:
+  - ../../base
+  # Enable cert-manager
+  - ../../certmanager
+
+patches:
+  # Remove OpenShift service signer annotation from webhook service
+  - path: patches/webhook-service.yaml
+  # Disable OCP-specific controllers and NIM
+  - path: patches/controller-disable-env.yaml
+
+  # Remove all OpenShift Templates (runtime templates are OCP-specific)
+  - target:
+      kind: Template
+    patch: |
+      $patch: delete
+      apiVersion: template.openshift.io/v1
+      kind: Template
+      metadata:
+        name: placeholder
+
+  # Remove ServiceMonitor (Prometheus monitoring excluded for XKS)
+  - target:
+      kind: ServiceMonitor
+    patch: |
+      $patch: delete
+      apiVersion: monitoring.coreos.com/v1
+      kind: ServiceMonitor
+      metadata:
+        name: placeholder
+
+  # Remove OpenShift CA injection and add cert-manager annotations on ALL webhooks
+  - target:
+      kind: ValidatingWebhookConfiguration
+    patch: |
+      - op: remove
+        path: /metadata/annotations/service.beta.openshift.io~1inject-cabundle
+      - op: add
+        path: /metadata/annotations/cert-manager.io~1inject-ca-from
+        value: "$(NAMESPACE)/odh-model-controller-webhook-server"
+  - target:
+      kind: MutatingWebhookConfiguration
+    patch: |
+      - op: remove
+        path: /metadata/annotations/service.beta.openshift.io~1inject-cabundle
+      - op: add
+        path: /metadata/annotations/cert-manager.io~1inject-ca-from
+        value: "$(NAMESPACE)/odh-model-controller-webhook-server"
+
+# Generate ConfigMap from params.env for variable substitution
+configMapGenerator:
+  - envs:
+      - params.env
+    name: odh-xks-parameters
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+# Define variables for substitution
+vars:
+  - name: NAMESPACE
+    objref:
+      apiVersion: v1
+      kind: ConfigMap
+      name: odh-xks-parameters
+    fieldref:
+      fieldpath: data.NAMESPACE
+  - name: ISSUER_REF_GROUP
+    objref:
+      apiVersion: v1
+      kind: ConfigMap
+      name: odh-xks-parameters
+    fieldref:
+      fieldpath: data.ISSUER_REF_GROUP
+  - name: ISSUER_REF_KIND
+    objref:
+      apiVersion: v1
+      kind: ConfigMap
+      name: odh-xks-parameters
+    fieldref:
+      fieldpath: data.ISSUER_REF_KIND
+  - name: ISSUER_REF_NAME
+    objref:
+      apiVersion: v1
+      kind: ConfigMap
+      name: odh-xks-parameters
+    fieldref:
+      fieldpath: data.ISSUER_REF_NAME
+
+# Configuration for var substitution paths
+configurations:
+  - params.yaml

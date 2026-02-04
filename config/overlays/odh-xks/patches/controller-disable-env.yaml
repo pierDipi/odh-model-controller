@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: odh-model-controller
+  namespace: system
+spec:
+  template:
+    spec:
+      containers:
+        - name: manager
+          env:
+            - name: NIM_STATE
+              value: removed
+            - name: INFERENCESERVICE_CONTROLLER_DISABLED
+              value: "true"
+            - name: SERVINGRUNTIME_CONTROLLER_DISABLED
+              value: "true"
+            - name: CONFIGMAP_CONTROLLER_DISABLED
+              value: "true"
