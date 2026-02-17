@@ -39,7 +39,7 @@ spec:
               common_tls_context:
                 validation_context:
                   trusted_ca:
-                    filename: /var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt
+                    filename: {{ .IstioCACertificatePath }}
   targetRefs:
   - group: gateway.networking.k8s.io
     kind: Gateway

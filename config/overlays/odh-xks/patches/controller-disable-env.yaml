@@ -17,3 +17,5 @@ spec:
               value: "true"
             - name: CONFIGMAP_CONTROLLER_DISABLED
               value: "true"
+            - name: ISTIO_CA_CERTIFICATE_PATH
+              value: "$(ISTIO_CA_CERTIFICATE_PATH)"

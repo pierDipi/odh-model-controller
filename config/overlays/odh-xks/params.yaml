@@ -11,3 +11,6 @@ varReference:
     kind: Certificate
   - path: spec/issuerRef/group
     kind: Certificate
+  # Allow substitution in Deployment env values
+  - path: spec/template/spec/containers/env/value
+    kind: Deployment

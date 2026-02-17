@@ -20,6 +20,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"os"
 	"strings"
 	"text/template"
 
@@ -72,6 +73,9 @@ func (k *kserveEnvoyFilterTemplateLoader) Load(ctx context.Context, gatewayNames
 	return k.renderSSLTemplate(gatewayNamespace, gatewayName, kuadrantNamespace)
 }
 
+// Default CA certificate path for OpenShift (service CA)
+const defaultIstioCACertPath = "/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt"
+
 // renderSSLTemplate renders the EnvoyFilter template. Pure function.
 func (k *kserveEnvoyFilterTemplateLoader) renderSSLTemplate(gatewayNamespace, gatewayName, kuadrantNamespace string) (*istioclientv1alpha3.EnvoyFilter, error) {
 	tmpl, err := template.New("envoyfilter").Parse(string(envoyFilterTemplateSSL))
@@ -79,16 +83,24 @@ func (k *kserveEnvoyFilterTemplateLoader) renderSSLTemplate(gatewayNamespace, ga
 		return nil, fmt.Errorf("failed to parse EnvoyFilter template: %w", err)
 	}
 
+	// Get CA certificate path from env var, default to OpenShift service CA path
+	istioCACertPath := os.Getenv("ISTIO_CA_CERTIFICATE_PATH")
+	if istioCACertPath == "" {
+		istioCACertPath = defaultIstioCACertPath
+	}
+
 	templateData := struct {
-		Name              string
-		GatewayName       string
-		GatewayNamespace  string
-		KuadrantNamespace string
+		Name                  string
+		GatewayName           string
+		GatewayNamespace      string
+		KuadrantNamespace     string
+		IstioCACertificatePath string
 	}{
-		Name:              constants.GetGatewayEnvoyFilterName(gatewayName),
-		GatewayName:       gatewayName,
-		GatewayNamespace:  gatewayNamespace,
-		KuadrantNamespace: kuadrantNamespace,
+		Name:                   constants.GetGatewayEnvoyFilterName(gatewayName),
+		GatewayName:            gatewayName,
+		GatewayNamespace:       gatewayNamespace,
+		KuadrantNamespace:      kuadrantNamespace,
+		IstioCACertificatePath: istioCACertPath,
 	}
 
 	var builder strings.Builder

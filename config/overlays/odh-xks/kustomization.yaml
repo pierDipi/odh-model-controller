@@ -92,6 +92,13 @@ vars:
       name: odh-xks-parameters
     fieldref:
       fieldpath: data.ISSUER_REF_NAME
+  - name: ISTIO_CA_CERTIFICATE_PATH
+    objref:
+      apiVersion: v1
+      kind: ConfigMap
+      name: odh-xks-parameters
+    fieldref:
+      fieldpath: data.ISTIO_CA_CERTIFICATE_PATH
 
 # Configuration for var substitution paths
 configurations:
