@@ -2,13 +2,16 @@ package gateway
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 
 	authorizationv1 "k8s.io/api/authorization/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -71,8 +74,12 @@ func (d *KubeDiscoverer) Discover(ctx context.Context, userToken, targetNamespac
 
 	allowed, err := d.AccessChecker.CheckAccess(ctx, userToken, targetNamespace)
 	if err != nil {
-		// Return empty list on access check errors to avoid leaking
-		// information about whether the error was auth-related or not.
+		if isInfrastructureError(err) {
+			return nil, fmt.Errorf("access check: %w", err)
+		}
+		// Return empty list on non-infrastructure access check errors to
+		// avoid leaking information about whether the error was
+		// auth-related or not.
 		slog.Error("access check failed", "error", err)
 		return []GatewayRef{}, nil
 	}
@@ -179,6 +186,21 @@ func (c *SelfSubjectAccessChecker) CheckAccess(ctx context.Context, userToken, n
 	}
 
 	return result.Status.Allowed, nil
+}
+
+// isInfrastructureError reports whether err is a network-level failure or
+// a 5xx response from the Kubernetes API server — problems that indicate
+// an infrastructure issue rather than a user-denial.
+func isInfrastructureError(err error) bool {
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		return true
+	}
+	var statusErr *apierrors.StatusError
+	if errors.As(err, &statusErr) {
+		return statusErr.Status().Code >= 500
+	}
+	return false
 }
 
 // bearerTokenRoundTripper wraps a base RoundTripper and injects a Bearer
