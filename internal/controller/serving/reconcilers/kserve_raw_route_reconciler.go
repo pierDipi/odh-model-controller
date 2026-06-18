@@ -164,6 +164,7 @@ func (r *KserveRawRouteReconciler) createDesiredResource(ctx context.Context, lo
 	}
 
 	// Set route timeout
+	utils.PropagateRouteAnnotations(desiredRoute, isvc)
 	utils.SetOpenshiftRouteTimeoutForIsvc(desiredRoute, isvc)
 
 	if enableSSL {

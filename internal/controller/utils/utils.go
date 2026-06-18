@@ -259,6 +259,17 @@ func SetOpenshiftRouteTimeoutForIsvc(route *v1.Route, isvc *kservev1beta1.Infere
 	route.Annotations[constants.RouteTimeoutAnnotationKey] = fmt.Sprintf("%ds", timeout)
 }
 
+func PropagateRouteAnnotations(route *v1.Route, src metav1.Object) {
+	for key, value := range src.GetAnnotations() {
+		if strings.HasPrefix(key, "haproxy.router.openshift.io") {
+			if route.Annotations == nil {
+				route.Annotations = make(map[string]string, 2)
+			}
+			route.Annotations[key] = value
+		}
+	}
+}
+
 func GetEnvOr(key, defaultValue string) string {
 	if env, defined := os.LookupEnv(key); defined {
 		return env
